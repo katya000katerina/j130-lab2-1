@@ -1,4 +1,4 @@
-package org.example;
+package org.example.models;
 
 import java.util.Objects;
 
@@ -18,6 +18,7 @@ public class Product {
         setPrice(price);
         setStockBalance(stockBalance);
     }
+
     public Product(String vendorCode, String itemName, String colour, int price, int stockBalance) {
         this(vendorCode, itemName, price, stockBalance);
         setColour(colour);
