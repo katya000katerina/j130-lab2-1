@@ -1,8 +1,13 @@
 package org.example;
 
+import org.example.models.Order;
+import org.example.models.OrderItem;
+import org.example.models.Product;
+
 import java.sql.*;
-import java.sql.Date;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class DatabaseManagement {
     private static final String url = "jdbc:mysql://localhost:3306/j_130_1";
@@ -31,16 +36,15 @@ public class DatabaseManagement {
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery("select * from products")) {
             while (rs.next()) {
-                StringBuilder builder = new StringBuilder();
-                builder.append(rs.getString("vendor_code"));
-                builder.append(";");
-                builder.append(rs.getString("item_name"));
-                builder.append(";");
-                builder.append(rs.getString("colour"));
-                builder.append(";");
-                builder.append(rs.getString("price"));
-                builder.append(";");
-                builder.append(rs.getString("stock_balance"));
+                String builder = rs.getString("vendor_code") +
+                        ";" +
+                        rs.getString("item_name") +
+                        ";" +
+                        rs.getString("colour") +
+                        ";" +
+                        rs.getString("price") +
+                        ";" +
+                        rs.getString("stock_balance");
                 System.out.println(builder);
             }
         } catch (SQLException e) {
@@ -48,7 +52,11 @@ public class DatabaseManagement {
         }
     }
 
-    public static void printOrderProducts(int orderId) {
+    public static void printOrderProducts(Order order) throws SQLException {
+        int orderId = order.getId();
+        if (orderId == 0) {
+            throw new SQLException("The order has not been added to the database yet");
+        }
         try (Connection connection = DriverManager.getConnection(url, user, password);
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery("select p.item_name, p.colour from j_130_1.orders o " +
@@ -71,21 +79,23 @@ public class DatabaseManagement {
         }
     }
 
-    public static void addOrder(String customerFullName, String contactTelephoneNumber, String emailAddress, String deliveryAddress, Product... products) {
+    public static void addOrder(Order order) {
         try (Connection connection = DriverManager.getConnection(url, user, password);
              PreparedStatement ps = connection.prepareStatement("insert into orders (creation_date, customer_full_name, contact_telephone_number, " +
                      "email_address, delivery_address, order_status, delivery_date) " +
                      " values(?, ?, ?, ?, ?, 'P', null);", Statement.RETURN_GENERATED_KEYS)) {
             ps.setDate(1, Date.valueOf(java.time.LocalDate.now()));
-            ps.setString(2, customerFullName);
-            ps.setString(3, contactTelephoneNumber);
-            ps.setString(4, emailAddress);
-            ps.setString(5, deliveryAddress);
+            ps.setString(2, order.getCustomerFullName());
+            ps.setString(3, order.getContactTelephoneNumber());
+            ps.setString(4, order.getEmailAddress());
+            ps.setString(5, order.getDeliveryAddress());
             ps.execute();
 
             try (ResultSet generatedKeys = ps.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
-                    addProductsToOrder((int) generatedKeys.getLong(1), products);
+                    int id = (int) generatedKeys.getLong(1);
+                    order.setId(id);
+                    addProductsToOrder(id, order.getOrderItems());
                 }
             } catch (SQLException e) {
                 throw new RuntimeException(e);
@@ -95,30 +105,18 @@ public class DatabaseManagement {
         }
     }
 
-    private static void addProductsToOrder(int orderId, Product... products) {
+    private static void addProductsToOrder(int orderId, List<OrderItem> items) {
         try (Connection connection = DriverManager.getConnection(url, user, password);
              PreparedStatement ps2 = connection.prepareStatement("insert into order_items values (?, ?, ?, ?);")) {
-            for (Map.Entry<Product, Integer> entry : countProducts(products).entrySet()) {
+            for (OrderItem orderItem : items) {
                 ps2.setInt(1, orderId);
-                ps2.setString(2, entry.getKey().getVendorCode());
-                ps2.setInt(3, entry.getKey().getPrice());
-                ps2.setInt(4, entry.getValue());
+                ps2.setString(2, orderItem.getProduct().getVendorCode());
+                ps2.setInt(3, orderItem.getPrice());
+                ps2.setInt(4, orderItem.getQuantity());
                 ps2.execute();
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private static Map<Product, Integer> countProducts(Product... products) {
-        Map<Product, Integer> map = new HashMap<>();
-        for (Product product : products) {
-            if (map.containsKey(product)) {
-                map.put(product, map.get(product) + 1);
-            } else {
-                map.put(product, 1);
-            }
-        }
-        return map;
     }
 }
